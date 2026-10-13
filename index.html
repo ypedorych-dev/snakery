@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="Snakergy — змійка на графіку відключень. Збирай енергію, оминаючи відключення, і приноси очки своєму району Києва.">
+<meta name="theme-color" content="#FFE500">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Snakergy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap">
+<style>
+/* Layout: one working sheet — controls bar, the outage-schedule grid as the playfield, legend, district leaderboard below.
+   Single light look on purpose: it mirrors a printed outage schedule. */
+:root{
+  color-scheme: light;
+  --paper:#ffffff;
+  --ground:#f4f5f7;
+  --ink:#141a33;
+  --ink-soft:#5b6278;
+  --line:#dfe2e8;
+  --off:#cfd3da;
+  --maybe:#eef0f3;
+  --volt:#ffe100;
+  --volt-ink:#141a33;
+  --volt-dim:#ffffff;
+  --danger:#c7372f;
+  --f-display:"Roboto", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-body:"Roboto", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono:"Roboto", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --radius:14px;
+}
+[hidden]{display:none!important}
+html,body{background:var(--ground);color:var(--ink)}
+body{font-variant-numeric:tabular-nums;font-family:var(--f-body);font-size:15px;line-height:1.45}
+.wrap{max-width:1240px;margin:0 auto;padding-inline:16px;padding-block:20px 48px;display:grid;gap:20px}
+
+.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 24px}
+.brand h1{font-family:var(--f-display);font-weight:700;font-size:clamp(22px,3vw,30px);letter-spacing:-.01em;margin:0;line-height:1.1;text-wrap:balance}
+.brand h1 .bolt{display:inline-block;width:.9em;height:.9em;vertical-align:-.08em;background:var(--volt) var(--ico-bolt) center/70% no-repeat;border-radius:4px;margin-right:.25em}
+.brand p{margin:6px 0 0;color:var(--ink-soft);font-size:13px}
+
+.controls{display:flex;flex-wrap:wrap;gap:12px;align-items:stretch}
+.field{display:flex;flex-direction:column;gap:4px}
+.field label,.hud .k{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);font-weight:600}
+.pill{height:48px;border:1px solid var(--line);border-radius:12px;background:var(--paper);padding:0 16px;display:flex;align-items:center;font:600 16px var(--f-body);color:var(--ink);min-width:0}
+select.pill{appearance:none;padding-right:40px;cursor:pointer;background:var(--paper) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9' viewBox='0 0 14 9'%3E%3Cpath d='M1 1l6 6 6-6' fill='none' stroke='%23141a33' stroke-width='1.8'/%3E%3C/svg%3E") right 14px center no-repeat;min-width:220px}
+select.pill:focus-visible,.btn:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+.btn{height:48px;border:0;border-radius:12px;padding:0 26px;font:700 16px var(--f-display);letter-spacing:.01em;cursor:pointer;background:var(--volt);color:var(--volt-ink);box-shadow:inset 0 -3px 0 rgba(20,26,51,.18);transition:transform .08s}
+.btn:hover{transform:translateY(-1px)}
+.btn:active{transform:translateY(1px)}
+.btn[disabled]{background:var(--off);color:var(--ink-soft);cursor:not-allowed;transform:none;box-shadow:none}
+.btn.dark{background:var(--ink);color:var(--paper)}
+.btn.ghost{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
+.actions{display:flex;flex-wrap:wrap;gap:10px}
+.actions .btn{flex:1 1 180px}
+.card label{display:grid;gap:6px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);font-weight:600}
+.card select.pill{width:100%;min-width:0;text-transform:none;letter-spacing:0}
+.card.intro h3,.card.intro > p{text-align:center;text-wrap:balance}
+.card.intro h3{font-size:30px}
+.card .iso{width:100%;max-width:400px;height:auto;justify-self:center;display:block;overflow:visible}
+.iso-float{animation:isoFloat 2.4s ease-in-out infinite}
+.iso-rays{animation:isoRays 1.2s ease-in-out infinite}
+.iso-shadow{animation:isoShadow 2.4s ease-in-out infinite}
+@keyframes isoFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@keyframes isoRays{0%,100%{opacity:.35}50%{opacity:1}}
+@keyframes isoShadow{0%,100%{opacity:.5}50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.iso-float,.iso-rays,.iso-shadow{animation:none}}
+.intro-ico{width:56px;height:56px;border-radius:12px;background:var(--volt) var(--ico-bolt) center/55% no-repeat}
+.hint{font-size:12px;color:var(--danger);min-height:1em}
+
+.hud{display:flex;flex-wrap:wrap;gap:8px}
+.hud .cell{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:8px 14px;display:flex;flex-direction:column;min-width:96px}
+.hud .v.small{font-size:15px;line-height:1.75;white-space:nowrap}
+.hud .cell.score{background:var(--volt);border-color:var(--volt)}
+.hud .cell.score .k{color:var(--volt-ink)}
+.hud .v{font:700 20px var(--f-mono);font-variant-numeric:tabular-nums;color:var(--ink)}
+
+.sheet{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);padding:16px;display:grid;gap:16px;position:relative}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.board{display:grid;grid-template-columns:72px repeat(24,minmax(28px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:820px}
+.board > div{background-color:var(--paper)}
+.corner{display:flex;align-items:flex-end;justify-content:center;padding:6px;font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.08em;font-weight:600}
+.hour{display:flex;justify-content:center;align-items:center;padding:8px 0;font:700 13px var(--f-mono);writing-mode:vertical-rl;transform:rotate(180deg);height:62px;color:var(--ink)}
+.q{display:flex;align-items:center;justify-content:center;font:700 15px var(--f-mono);color:var(--ink)}
+.board > .c{aspect-ratio:1/1;padding:10px;box-sizing:border-box;background-origin:content-box;background-position:center;background-repeat:no-repeat;background-size:20px 20px}
+.board > .c.maybe{background-color:var(--maybe);background-image:var(--ico-maybe)}
+.board > .c.off{background-color:var(--off);background-image:var(--ico-off)}
+.board > .c.snake,.board > .c.food{background-color:var(--volt);background-image:var(--ico-bolt)}
+.board > .c.food{animation:pulse 1s ease-in-out infinite}
+@keyframes pulse{0%,100%{background-color:var(--volt)}50%{background-color:var(--volt-dim)}}
+@media (prefers-reduced-motion:reduce){.board > .c.food{animation:none}}
+.board > .c.crash{background-color:var(--danger);background-image:var(--ico-off-light)}
+
+.legend{display:flex;flex-wrap:wrap;gap:12px 28px;color:var(--ink-soft);font-size:14px}
+.legend span{display:inline-flex;align-items:center;gap:10px}
+.sw{width:36px;height:36px;border:1px solid var(--line);border-radius:4px;background:var(--paper) center/16px no-repeat;flex:none}
+.sw.maybe{background-color:var(--maybe);background-image:var(--ico-maybe)}
+.sw.off{background-color:var(--off);background-image:var(--ico-off)}
+.sw.volt{background-color:var(--volt);background-image:var(--ico-bolt)}
+.note{font-size:13px;color:var(--ink-soft);margin:0}
+
+.rating h2{font-family:var(--f-display);font-weight:500;font-size:20px;margin:0;text-wrap:balance}
+.rating header{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:baseline;justify-content:space-between}
+.tag{font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--ink);background:var(--ground);border:1px dashed var(--off);border-radius:6px;padding:3px 8px}
+.rows{display:grid;gap:6px;margin:0;padding:0;list-style:none}
+.row{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 10px;border-radius:10px}
+.row.me{background:#fff7b8}
+.row .n{font:700 13px var(--f-mono);color:var(--ink-soft);text-align:right}
+.row .name{display:grid;gap:4px;min-width:0}
+.row .name b{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar{height:6px;border-radius:3px;background:var(--ground);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--ink);border-radius:3px}
+.row.me .bar i{background:var(--volt-ink)}
+.row .pts{font:700 15px var(--f-mono);font-variant-numeric:tabular-nums;text-align:right}
+.row .plus{display:block;font-size:12px;color:var(--ink);background:var(--volt);border-radius:4px;padding:0 6px;margin-top:2px}
+
+.modal{position:fixed;inset:0;display:grid;place-items:center;padding:16px;background:rgba(20,26,51,.45);z-index:20}
+.card{box-sizing:border-box;background:var(--paper);color:var(--ink);border-radius:18px;max-width:520px;width:100%;padding:28px 24px;display:grid;gap:18px;box-shadow:0 20px 60px rgba(20,26,51,.3);max-height:calc(100% - 32px);overflow:auto}
+.card h3{font-family:var(--f-display);font-weight:700;font-size:26px;margin:0;line-height:1.15;text-wrap:balance}
+.card p{margin:0;color:var(--ink-soft)}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stats.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.stats div{background:var(--ground);border-radius:12px;padding:12px 14px;display:grid;gap:2px}
+.stats .k{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);font-weight:600}
+.stats .v{font:700 24px var(--f-mono);font-variant-numeric:tabular-nums}
+.card .rows{max-height:330px;overflow:auto}
+.count{position:absolute;inset:0;z-index:5;display:grid;place-content:center;justify-items:center;gap:4px;background:rgba(255,255,255,.55);border-radius:var(--radius);font:700 clamp(72px,12vw,140px)/1 var(--f-display);color:var(--ink);pointer-events:none}
+.count small{font:600 14px var(--f-body);text-transform:uppercase;letter-spacing:.1em;color:var(--ink-soft)}
+#confetti{position:fixed;inset:0;pointer-events:none;z-index:30;width:100%;height:100%}
+.pad{display:none}
+/* ---- mobile layout: field rotated (hours down, queues across), swipe + buttons ---- */
+html.m{height:100%;box-sizing:border-box;overflow:hidden;overscroll-behavior:none}
+html.m body{height:100%;overflow:hidden;overscroll-behavior:none;-webkit-user-select:none;user-select:none}
+.m .wrap{height:100%;box-sizing:border-box;padding-block:8px 12px;gap:8px;display:flex;flex-direction:column;touch-action:none}
+.m .modal{touch-action:pan-y}
+.m .sheet{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;justify-content:space-between}
+.m .top,.m .legend,.m .sheet > .note{display:none}
+.m .hud{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.m .hud .cell{min-width:0;padding:6px 10px;border-radius:10px}
+.m .hud .v{font-size:17px}
+.m .hud .k{font-size:10px}
+.m .sheet{padding:0;border:0;background:transparent;gap:10px}
+.m .scroll{overflow:visible}
+.m .board{min-width:0;width:max-content;margin:0 auto;grid-template-columns:30px repeat(12,var(--cell,22px));border-radius:10px}
+.m .corner{padding:2px;font-size:0}
+.m .hour{writing-mode:horizontal-tb;transform:none;height:var(--cell,22px);padding:0;font-size:10px;font-weight:500}
+.m .q{font-size:10px;font-weight:700;padding:5px 0}
+.m .board > .c{width:var(--cell,22px);height:var(--cell,22px);aspect-ratio:auto;padding:0;background-size:14px 14px}
+.m .pad{display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:46px 46px;gap:6px;touch-action:none}
+.m .pad [data-dir="left"]{grid-column:1;grid-row:1 / 3}
+.m .pad [data-dir="up"]{grid-column:2;grid-row:1}
+.m .pad [data-dir="down"]{grid-column:2;grid-row:2}
+.m .pad [data-dir="right"]{grid-column:3;grid-row:1 / 3}
+.m .pad button{height:100%;border:1px solid var(--line);border-radius:12px;background:var(--paper);display:grid;place-items:center;color:var(--ink);cursor:pointer;-webkit-tap-highlight-color:transparent}
+.m .pad button:active,.m .pad button.hit{background:var(--volt);border-color:var(--volt)}
+.m .pad svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+.m .count{font-size:96px}
+.m .modal{padding:20px}
+.m .card{padding:24px 20px;border-radius:20px}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="top">
+    <div class="brand">
+      <h1><span class="bolt" aria-hidden="true"></span>Snakergy</h1>
+      <p>Фан-проєкт за мотивами графіків відключень. Не пов'язаний з ДТЕК.</p>
+    </div>
+    <div class="hud" aria-live="polite">
+      <div class="cell"><span class="k">Район</span><span class="v small" id="hDistrict">—</span></div>
+      <div class="cell"><span class="k">Рівень</span><span class="v" id="hLevel">1</span></div>
+      <div class="cell"><span class="k">Енергія</span><span class="v" id="hGoal">0/5</span></div>
+      <div class="cell"><span class="k">Час</span><span class="v" id="hTime">0:00</span></div>
+      <div class="cell score"><span class="k">Очки</span><span class="v" id="hScore">0</span></div>
+    </div>
+  </div>
+
+  <section class="sheet" aria-label="Ігрове поле">
+    <div class="count" id="count" hidden aria-live="assertive"></div>
+    <div class="scroll"><div class="board" id="board" role="grid" aria-label="Графік: 12 підчерг, 24 години"></div></div>
+    <div class="pad" id="pad" aria-label="Керування">
+      <button type="button" data-dir="left" aria-label="Ліворуч"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <button type="button" data-dir="up" aria-label="Вгору"><svg viewBox="0 0 24 24"><path d="M5 15l7-7 7 7"/></svg></button>
+      <button type="button" data-dir="down" aria-label="Вниз"><svg viewBox="0 0 24 24"><path d="M5 9l7 7 7-7"/></svg></button>
+      <button type="button" data-dir="right" aria-label="Праворуч"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+    </div>
+    <div class="legend">
+      <span><i class="sw"></i>Світло є: тут можна рухатися</span>
+      <span><i class="sw volt"></i>Енергія: змійка й ціль</span>
+      <span><i class="sw maybe"></i>Можливо відключення: рух удвічі повільніший</span>
+      <span><i class="sw off"></i>Світла немає: врізався — кінець гри</span>
+    </div>
+    <p class="note">Керування стрілками. Краї поля прохідні: виходиш праворуч — з'являєшся ліворуч.</p>
+  </section>
+
+</div>
+
+<div class="modal" id="modal" hidden><div class="card" id="modalCard" role="dialog" aria-modal="true"></div></div>
+<canvas id="confetti" hidden></canvas>
+
+<script>
+(() => {
+  const ROWS = 12, COLS = 24;
+  const QUEUES = []; for (let q = 1; q <= 6; q++) { QUEUES.push(q + '.1', q + '.2'); }
+
+  // icons
+  const bolt = c => `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M11.9039 8.49553L4.42571 1.18281L3.74875 4.46782L3.01699 7.86709C2.99853 7.95225 2.99999 8.0409 3.02123 8.12621C3.04248 8.21151 3.08296 8.29119 3.13954 8.3591C3.19612 8.427 3.26729 8.48131 3.34756 8.51785C3.42784 8.55438 3.51506 8.57215 3.60252 8.5698H6.36252L5.45266 15.3398C5.4363 15.4653 5.46232 15.5935 5.52663 15.7042C5.59093 15.8149 5.68985 15.9017 5.80778 15.9511C5.88101 15.9806 5.95887 15.9961 6.03727 15.9968C6.12453 15.9966 6.21019 15.9764 6.28766 15.9378C6.36514 15.8991 6.43238 15.8431 6.48423 15.774L10.2013 10.7865L11.9039 8.49553ZM11.9039 8.49553L13.7179 6.06176C13.7763 5.98058 13.8118 5.88494 13.8209 5.78459C13.8299 5.68423 13.8121 5.58275 13.7693 5.49046C13.7243 5.38896 13.6511 5.30206 13.5586 5.24023C13.4662 5.17839 13.3583 5.14427 13.248 5.14196L10.5337 5.14196L11.4445 0.697198C11.4618 0.612884 11.4596 0.525376 11.4381 0.441262C11.4166 0.357148 11.3764 0.27862 11.3205 0.211587C11.2642 0.143778 11.1933 0.089467 11.1133 0.0528239C11.0333 0.0161808 10.9464 -0.00181983 10.8591 0.000204192L5.14484 0.000204192C5.01346 -0.00330556 4.88579 0.0385213 4.78332 0.118644C4.68085 0.198766 4.60984 0.312292 4.58224 0.44011L4.42571 1.18281L11.9039 8.49553Z' fill='${c}'/></svg>`;
+  const boltOff = c => `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M15.875 15.0818L0.918125 0.124957L0.125 0.918082L3.725 4.52371L2.9375 7.87058C2.91765 7.95443 2.91733 8.04171 2.93656 8.1257C2.95579 8.20969 2.99406 8.28815 3.04842 8.355C3.10277 8.42186 3.17176 8.47533 3.25006 8.5113C3.32835 8.54727 3.41387 8.56477 3.5 8.56246H6.21688L5.1875 15.2281C5.16892 15.3516 5.19201 15.4779 5.25312 15.5868C5.31423 15.6958 5.40989 15.7814 5.525 15.83C5.5965 15.859 5.67284 15.8742 5.75 15.875C5.8359 15.8747 5.92062 15.8549 5.99765 15.8168C6.07468 15.7788 6.14197 15.7237 6.19438 15.6556L9.95187 10.745L15.0819 15.875L15.875 15.0818ZM11.6731 8.48933L13.5069 6.09308C13.566 6.01315 13.6028 5.91899 13.6137 5.82018C13.6246 5.72137 13.6091 5.62145 13.5687 5.53058C13.5265 5.43065 13.4562 5.34509 13.3663 5.28421C13.2765 5.22333 13.171 5.18973 13.0625 5.18746H10.3906L11.375 0.811207C11.3936 0.728192 11.3932 0.642033 11.3737 0.559216C11.3542 0.476399 11.3162 0.399081 11.2625 0.333082C11.2084 0.266318 11.1397 0.212844 11.0617 0.176766C10.9837 0.140687 10.8984 0.122964 10.8125 0.124957H5.1875C5.05824 0.121501 4.93174 0.162683 4.82929 0.241571C4.72684 0.320458 4.65469 0.432234 4.625 0.558082L4.45625 1.28933L11.6731 8.48933Z' fill='${c}'/></svg>`;
+  const uri = s => `url("data:image/svg+xml,${encodeURIComponent(s)}")`;
+  const rs = document.documentElement.style;
+  rs.setProperty('--ico-bolt', uri(bolt('#11203E')));
+  rs.setProperty('--ico-off', uri(boltOff('#11203E')));
+  rs.setProperty('--ico-maybe', uri(boltOff('#b3b9c4')));
+  rs.setProperty('--ico-off-light', uri(boltOff('#ffffff')));
+
+  // districts + demo rating (example values, not real results)
+  const DISTRICTS = ['Голосіївський','Дарницький','Деснянський','Дніпровський','Оболонський','Печерський','Подільський','Святошинський','Солом\'янський','Шевченківський'];
+  const demo = { 'Голосіївський':18420,'Дарницький':22950,'Деснянський':27310,'Дніпровський':16880,'Оболонський':24170,'Печерський':9340,'Подільський':12760,'Святошинський':20530,'Солом\'янський':19980,'Шевченківський':14210 };
+  const rating = { ...demo };
+  let district = '';
+
+  // layout mode: touch phones get the rotated field
+  const MOBILE = window.matchMedia('(pointer: coarse) and (max-width: 768px)').matches;
+  document.documentElement.classList.toggle('m', MOBILE);
+
+  // board DOM
+  const boardEl = document.getElementById('board');
+  const cells = new Array(ROWS * COLS);
+  if (MOBILE) {
+    boardEl.setAttribute('aria-label', 'Графік: 24 години, 12 підчерг');
+    const corner = document.createElement('div'); corner.className = 'corner'; boardEl.appendChild(corner);
+    for (let r = 0; r < ROWS; r++) { const q = document.createElement('div'); q.className = 'q'; q.textContent = QUEUES[r]; boardEl.appendChild(q); }
+    for (let h = 0; h < COLS; h++) {
+      const d = document.createElement('div'); d.className = 'hour'; d.textContent = String(h).padStart(2, '0'); boardEl.appendChild(d);
+      for (let r = 0; r < ROWS; r++) { const c = document.createElement('div'); c.className = 'c'; boardEl.appendChild(c); cells[r * COLS + h] = c; }
+    }
+  } else (() => {
+    const corner = document.createElement('div'); corner.className = 'corner'; corner.textContent = 'Черга'; boardEl.appendChild(corner);
+    for (let h = 0; h < COLS; h++) { const d = document.createElement('div'); d.className = 'hour'; d.textContent = String(h).padStart(2, '0') + ':00'; boardEl.appendChild(d); }
+    for (let r = 0; r < ROWS; r++) {
+      const q = document.createElement('div'); q.className = 'q'; q.textContent = QUEUES[r]; boardEl.appendChild(q);
+      for (let c = 0; c < COLS; c++) { const d = document.createElement('div'); d.className = 'c'; boardEl.appendChild(d); cells[r * COLS + c] = d; }
+    }
+  })();
+
+  // level design
+  // rows: 'half' = only 1.1, 3.1, 5.1; 'all' = every X.1 row
+  const LEVELS = [
+    { rows: 'half', b: 1, i: 8 }, // L1: 9 obstacles
+    { rows: 'all',  b: 1, i: 8 }, // L2: 18
+    { rows: 'all',  b: 1, i: 6 }, // L3: 24
+    { rows: 'all',  b: 2, i: 8 }, // L4: 36
+    { rows: 'all',  b: 3, i: 6 }, // L5: 72
+    { rows: 'all',  b: 4, i: 6 }, // L6+: 96
+  ];
+  const levelCfg = lvl => LEVELS[Math.min(lvl, LEVELS.length) - 1];
+  const stepMs = lvl => Math.max(150, 500 - 40 * (lvl - 1));
+  const goalFor = lvl => 4 + lvl;
+  const idx = (r, c) => r * COLS + c;
+
+  function buildObstacles(lvl) {
+    const { rows, b, i } = levelCfg(lvl);
+    const set = new Set(), maybe = new Set();
+    for (let k = 0; k < 6; k++) {
+      if (rows === 'half' && k % 2) continue;
+      const r = 2 * k; // odd queues in 1-based terms: 1.1, 2.1, ... 6.1
+      for (let start = (2 * k) % i; start < COLS; start += i) {
+        for (let j = 0; j < b; j++) set.add(idx(r, (start + j) % COLS));
+        const tail = 1 + ((k * 5 + start) % 2); // 1-2 "maybe" cells on each side, fixed per layout
+        for (let j = 0; j < tail; j++) {
+          maybe.add(idx(r, (start + b + j) % COLS));
+          maybe.add(idx(r, (start - 1 - j + COLS * 2) % COLS));
+        }
+      }
+    }
+    set.forEach(x => maybe.delete(x));
+    S.maybe = maybe;
+    return set;
+  }
+
+  // state
+  const S = { level: 1, goal: 5, got: 0, snake: [], dir: [0, 1], queue: [], obst: new Set(), maybe: new Set(), food: -1, timer: null, t0: 0, total: 0, running: false, crash: -1 };
+
+  function placeSnake() {
+    const freeRows = [1, 3, 5, 7, 9, 11];
+    for (let tries = 0; tries < 200; tries++) {
+      const r = freeRows[Math.floor(Math.random() * freeRows.length)];
+      const c = Math.floor(Math.random() * COLS);
+      const body = [0, 1, 2].map(k => idx(r, (c - k + COLS) % COLS));
+      let ok = body.every(x => !S.obst.has(x));
+      for (let k = 1; k <= 5 && ok; k++) if (S.obst.has(idx(r, (c + k) % COLS))) ok = false;
+      if (ok) { S.snake = body; S.dir = [0, 1]; S.queue = []; return; }
+    }
+  }
+  function placeFood() {
+    const busy = new Set(S.snake);
+    const free = [];
+    for (let x = 0; x < ROWS * COLS; x++) if (!S.obst.has(x) && !busy.has(x)) free.push(x);
+    S.food = free[Math.floor(Math.random() * free.length)];
+  }
+  function setupLevel(lvl) {
+    S.level = lvl; S.goal = goalFor(lvl); S.got = 0; S.crash = -1;
+    S.obst = buildObstacles(lvl); placeSnake(); placeFood();
+    render(); hud(0);
+  }
+
+  function render() {
+    const sn = new Set(S.snake);
+    for (let x = 0; x < cells.length; x++) {
+      let cls = 'c';
+      if (x === S.crash) cls += ' crash';
+      else if (S.obst.has(x)) cls += ' off';
+      else if (sn.has(x)) cls += ' snake';
+      else if (x === S.food) cls += ' food';
+      else if (S.maybe.has(x)) cls += ' maybe';
+      if (cells[x].className !== cls) cells[x].className = cls;
+    }
+  }
+  const fmt = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+  function hud(sec) {
+    document.getElementById('hLevel').textContent = S.level;
+    document.getElementById('hGoal').textContent = S.got + '/' + S.goal;
+    document.getElementById('hScore').textContent = S.total + S.got * 100;
+    document.getElementById('hTime').textContent = fmt(sec);
+  }
+
+  let countTimer = null;
+  function start() {
+    closeModal();
+    clearTimeout(S.timer); clearInterval(countTimer);
+    const cd = document.getElementById('count');
+    let n = 3;
+    cd.innerHTML = `<small>Рівень ${S.level}</small>${n}`; cd.hidden = false;
+    countTimer = setInterval(() => {
+      n--;
+      if (n > 0) { cd.innerHTML = `<small>Рівень ${S.level}</small>${n}`; return; }
+      clearInterval(countTimer); cd.hidden = true;
+      S.running = true; S.t0 = performance.now();
+      S.stepStart = S.t0; S.stepDur = stepMs(S.level);
+    }, 1000);
+  }
+  function stop() { S.running = false; clearTimeout(S.timer); }
+  // steady rhythm: steps are counted on the display refresh, not on a drifting timer
+  function frame(now) {
+    if (S.running) {
+      if (now - S.stepStart > 2000) S.stepStart = now; // tab was hidden: don't fast-forward
+      while (S.running && now - S.stepStart >= S.stepDur) {
+        S.stepStart += S.stepDur;
+        tick();
+        S.stepDur = stepMs(S.level) * (S.maybe.has(S.snake[0]) ? 2 : 1);
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  function tick() {
+    if (S.queue.length) S.dir = S.queue.shift();
+    const head = S.snake[0], r = Math.floor(head / COLS), c = head % COLS;
+    const nr = (r + S.dir[0] + ROWS) % ROWS, nc = (c + S.dir[1] + COLS) % COLS;
+    const next = idx(nr, nc);
+    const grow = next === S.food;
+    const bodyCheck = grow ? S.snake : S.snake.slice(0, -1);
+    const sec = (performance.now() - S.t0) / 1000;
+    if (S.obst.has(next) || bodyCheck.includes(next)) { S.crash = next; render(); return gameOver(sec); }
+    S.snake.unshift(next);
+    if (!grow) S.snake.pop();
+    else {
+      S.got++;
+      if (S.got >= S.goal) { render(); hud(sec); return levelDone(sec); }
+      placeFood();
+    }
+    render(); hud(sec);
+  }
+  // HUD clock between ticks
+  setInterval(() => { if (S.running) document.getElementById('hTime').textContent = fmt((performance.now() - S.t0) / 1000); }, 250);
+
+  // scoring (internal: faster level = more points)
+  const levelScore = (got, sec, finished) => got * 100 + (finished ? Math.max(0, Math.round(60 - sec)) * 5 : 0);
+
+  function levelDone(sec) {
+    stop();
+    const pts = levelScore(S.got, sec, true);
+    S.total += pts;
+    hud(sec); document.getElementById('hScore').textContent = S.total;
+    openModal(`
+      <h3>Рівень ${S.level} пройдено!</h3>
+      <p>Наступний рівень швидший, а перешкод більше.</p>
+      <div class="stats">
+        <div><span class="k">Очки за рівень</span><span class="v">${pts}</span></div>
+        <div><span class="k">Час</span><span class="v">${fmt(sec)}</span></div>
+      </div>
+      <button class="btn" id="nextBtn">До наступного рівня</button>`);
+    confetti();
+    document.getElementById('nextBtn').onclick = () => { setupLevel(S.level + 1); start(); };
+  }
+
+  let lastAdded = 0;
+  function gameOver(sec) {
+    stop();
+    const final = S.total + levelScore(S.got, sec, false);
+    const d = district;
+    rating[d] = (rating[d] || 0) + final; lastAdded = final;
+    openModal(`
+      <h3>Світло зникло</h3>
+      <p>${final > 0 ? `Внесок у ${d} район: <b>+${final}</b> очок.` : 'Цього разу без очок. Спробуй ще.'}</p>
+      <div class="stats three">
+        <div><span class="k">Очки</span><span class="v">${final}</span></div>
+        <div><span class="k">Рівень</span><span class="v">${S.level}</span></div>
+        <div><span class="k">Час на рівні</span><span class="v">${fmt(sec)}</span></div>
+      </div>
+      <ol class="rows" id="modal-rating"></ol>
+      <div class="actions"><button class="btn" id="againBtn">Ще раз</button><button class="btn ghost" id="changeBtn">Змінити район</button></div>`);
+    renderRating(document.getElementById('modal-rating'));
+    document.getElementById('againBtn').onclick = () => { S.total = 0; setupLevel(1); start(); };
+    document.getElementById('changeBtn').onclick = () => { S.total = 0; setupLevel(1); showIntro(); };
+  }
+
+  function renderRating(el) {
+    const list = DISTRICTS.map(d => [d, rating[d]]).sort((a, b) => b[1] - a[1]);
+    const max = list[0][1];
+    el.innerHTML = list.map(([d, p], i) => `
+      <li class="row${d === district ? ' me' : ''}">
+        <span class="n">${i + 1}</span>
+        <span class="name"><b>${d}</b><span class="bar"><i style="width:${(p / max * 100).toFixed(1)}%"></i></span></span>
+        <span class="pts">${p.toLocaleString('uk-UA')}${d === district && lastAdded ? `<span class="plus">+${lastAdded}</span>` : ''}</span>
+      </li>`).join('');
+  }
+
+  // modal
+  const modal = document.getElementById('modal'), card = document.getElementById('modalCard');
+  function openModal(html) { card.classList.remove('intro'); card.innerHTML = html; modal.hidden = false; const b = card.querySelector('button'); b && b.focus(); }
+  function closeModal() { modal.hidden = true; }
+
+  // intro popup
+  function showIntro() {
+    openModal(`
+      <svg class="iso" viewBox="-154 -46 368 238" role="img" aria-label="Змійка-блискавка пробирається між відключеннями до енергії"><polygon points="-150.0,75.0 60.0,180.0 60.0,188.0 -150.0,83.0" fill="#e4e7ec"/><polygon points="210.0,105.0 60.0,180.0 60.0,188.0 210.0,113.0" fill="#d3d7de"/><polygon points="0.0,0.0 30.0,15.0 0.0,30.0 -30.0,15.0" fill="#ffffff" stroke="#dfe2e8" stroke-width="1"/><polygon points="30.0,15.0 60.0,30.0 30.0,45.0 0.0,30.0" fill="#eef0f3" stroke="#dfe2e8" stroke-width="1"/><g transform="matrix(1.875 0.938 -1.875 0.938 30.0 15.0)"><path transform="translate(4.00 4.00) scale(0.5)" d="M15.875 15.0818L0.918125 0.124957L0.125 0.918082L3.725 4.52371L2.9375 7.87058C2.91765 7.95443 2.91733 8.04171 2.93656 8.1257C2.95579 8.20969 2.99406 8.28815 3.04842 8.355C3.10277 8.42186 3.17176 8.47533 3.25006 8.5113C3.32835 8.54727 3.41387 8.56477 3.5 8.56246H6.21688L5.1875 15.2281C5.16892 15.3516 5.19201 15.4779 5.25312 15.5868C5.31423 15.6958 5.40989 15.7814 5.525 15.83C5.5965 15.859 5.67284 15.8742 5.75 15.875C5.8359 15.8747 5.92062 15.8549 5.99765 15.8168C6.07468 15.7788 6.14197 15.7237 6.19438 15.6556L9.95187 10.745L15.0819 15.875L15.875 15.0818ZM11.6731 8.48933L13.5069 6.09308C13.566 6.01315 13.6028 5.91899 13.6137 5.82018C13.6246 5.72137 13.6091 5.62145 13.5687 5.53058C13.5265 5.43065 13.4562 5.34509 13.3663 5.28421C13.2765 5.22333 13.171 5.18973 13.0625 5.18746H10.3906L11.375 0.811207C11.3936 0.728192 11.3932 0.642033 11.3737 0.559216C11.3542 0.476399 11.3162 0.399081 11.2625 0.333082C11.2084 0.266318 11.1397 0.212844 11.0617 0.176766C10.9837 0.140687 10.8984 0.122964 10.8125 0.124957H5.1875C5.05824 0.121501 4.93174 0.162683 4.82929 0.241571C4.72684 0.320458 4.65469 0.432234 4.625 0.558082L4.45625 1.28933L11.6731 8.48933Z" fill="#b3b9c4"/></g><polygon points="60.0,30.0 90.0,45.0 60.0,60.0 30.0,45.0" fill="#ffffff" stroke="#dfe2e8" stroke-width="1"/><polygon points="90.0,45.0 120.0,60.0 90.0,75.0 60.0,60.0" fill="#eef0f3" stroke="#dfe2e8" stroke-width="1"/><g transform="matrix(1.875 0.938 -1.875 0.938 90.0 45.0)"><path transform="translate(4.00 4.00) scale(0.5)" d="M15.875 15.0818L0.918125 0.124957L0.125 0.918082L3.725 4.52371L2.9375 7.87058C2.91765 7.95443 2.91733 8.04171 2.93656 8.1257C2.95579 8.20969 2.99406 8.28815 3.04842 8.355C3.10277 8.42186 3.17176 8.47533 3.25006 8.5113C3.32835 8.54727 3.41387 8.56477 3.5 8.56246H6.21688L5.1875 15.2281C5.16892 15.3516 5.19201 15.4779 5.25312 15.5868C5.31423 15.6958 5.40989 15.7814 5.525 15.83C5.5965 15.859 5.67284 15.8742 5.75 15.875C5.8359 15.8747 5.92062 15.8549 5.99765 15.8168C6.07468 15.7788 6.14197 15.7237 6.19438 15.6556L9.95187 10.745L15.0819 15.875L15.875 15.0818ZM11.6731 8.48933L13.5069 6.09308C13.566 6.01315 13.6028 5.91899 13.6137 5.82018C13.6246 5.72137 13.6091 5.62145 13.5687 5.53058C13.5265 5.43065 13.4562 5.34509 13.3663 5.28421C13.2765 5.22333 13.171 5.18973 13.0625 5.18746H10.3906L11.375 0.811207C11.3936 0.728192 11.3932 0.642033 11.3737 0.559216C11.3542 0.476399 11.3162 0.399081 11.2625 0.333082C11.2084 0.266318 11.1397 0.212844 11.0617 0.176766C10.9837 0.140687 10.8984 0.122964 10.8125 0.124957H5.1875C5.05824 0.121501 4.93174 0.162683 4.82929 0.241571C4.72684 0.320458 4.65469 0.432234 4.625 0.558082L4.45625 1.28933L11.6731 8.48933Z" fill="#b3b9c4"/></g><polygon points="120.0,60.0 150.0,75.0 120.0,90.0 90.0,75.0" fill="#eef0f3" stroke="#dfe2e8" stroke-width="1"/><g transform="matrix(1.875 0.938 -1.875 0.938 120.0 60.0)"><path transform="translate(4.00 4.00) scale(0.5)" d="M15.875 15.0818L0.918125 0.124957L0.125 0.918082L3.725 4.52371L2.9375 7.87058C2.91765 7.95443 2.91733 8.04171 2.93656 8.1257C2.95579 8.20969 2.99406 8.28815 3.04842 8.355C3.10277 8.42186 3.17176 8.47533 3.25006 8.5113C3.32835 8.54727 3.41387 8.56477 3.5 8.56246H6.21688L5.1875 15.2281C5.16892 15.3516 5.19201 15.4779 5.25312 15.5868C5.31423 15.6958 5.40989 15.7814 5.525 15.83C5.5965 15.859 5.67284 15.8742 5.75 15.875C5.8359 15.8747 5.92062 15.8549 5.99765 15.8168C6.07468 15.7788 6.14197 15.7237 6.19438 15.6556L9.95187 10.745L15.0819 15.875L15.875 15.0818ZM11.6731 8.48933L13.5069 6.09308C13.566 6.01315 13.6028 5.91899 13.6137 5.82018C13.6246 5.72137 13.6091 5.62145 13.5687 5.53058C13.5265 5.43065 13.4562 5.34509 13.3663 5.28421C13.2765 5.22333 13.171 5.18973 13.0625 5.18746H10.3906L11.375 0.811207C11.3936 0.728192 11.3932 0.642033 11.3737 0.559216C11.3542 0.476399 11.3162 0.399081 11.2625 0.333082C11.2084 0.266318 11.1397 0.212844 11.0617 0.176766C10.9837 0.140687 10.8984 0.122964 10.8125 0.124957H5.1875C5.05824 0.121501 4.93174 0.162683 4.82929 0.241571C4.72684 0.320458 4.65469 0.432234 4.625 0.558082L4.45625 1.28933L11.6731 8.48933Z" fill="#b3b9c4"/></g><polygon points="150.0,75.0 180.0,90.0 150.0,105.0 120.0,90.0" fill="#ffffff" stroke="#dfe2e8" stroke-width="1"/><polygon points="180.0,90.0 210.0,105.0 180.0,120.0 150.0,105.0" fill="#eef0f3" stroke="#dfe2e8" stroke-width="1"/><g transform="matrix(1.875 0.938 -1.875 0.938 180.0 90.0)"><path transform="translate(4.00 4.00) scale(0.5)" d="M15.875 15.0818L0.918125 0.124957L0.125 0.918082L3.725 4.52371L2.9375 7.87058C2.91765 7.95443 2.91733 8.04171 2.93656 8.1257C2.95579 8.20969 2.99406 8.28815 3.04842 8.355C3.10277 8.42186 3.17176 8.47533 3.25006 8.5113C3.32835 8.54727 3.41387 8.56477 3.5 8.56246H6.21688L5.1875 15.2281C5.16892 15.3516 5.19201 15.4779 5.25312 15.5868C5.31423 15.6958 5.40989 15.7814 5.525 15.83C5.5965 15.859 5.67284 15.8742 5.75 15.875C5.8359 15.8747 5.92062 15.8549 5.99765 15.8168C6.07468 15.7788 6.14197 15.7237 6.19438 15.6556L9.95187 10.745L15.0819 15.875L15.875 15.0818ZM11.6731 8.48933L13.5069 6.09308C13.566 6.01315 13.6028 5.91899 13.6137 5.82018C13.6246 5.72137 13.6091 5.62145 13.5687 5.53058C13.5265 5.43065 13.4562 5.34509 13.3663 5.28421C13.2765 5.22333 13.171 5.18973 13.0625 5.18746H10.3906L11.375 0.811207C11.3936 0.728192 11.3932 0.642033 11.3737 0.559216C11.3542 0.476399 11.3162 0.399081 11.2625 0.333082C11.2084 0.266318 11.1397 0.212844 11.0617 0.176766C10.9837 0.140687 10.8984 0.122964 10.8125 0.124957H5.1875C5.05824 0.121501 4.93174 0.162683 4.82929 0.241571C4.72684 0.320458 4.65469 0.432234 4.625 0.558082L4.45625 1.28933L11.6731 8.48933Z" fill="#b3b9c4"/></g><polygon points="-30.0,15.0 0.0,30.0 -30.0,45.0 -60.0,30.0" fill="#ffffff" stroke="#dfe2e8" stroke-width="1"/><polygon points="0.0,30.0 30.0,45.0 0.0,60.0 -30.0,45.0" fill="#eef0f3" stroke="#dfe2e8" stroke-width="1"/><g transform="matrix(1.875 0.938 -1.875 0.938 0.0 30.0)"><path transform="translate(4.00 4.00) scale(0.5)" d="M15.875 15.0818L0.918125 0.124957L0.125 0.918082L3.725 4.52371L2.9375 7.87058C2.91765 7.95443 2.91733 8.04171 2.93656 8.1257C2.95579 8.20969 2.99406 8.28815 3.04842 8.355C3.10277 8.42186 3.17176 8.47533 3.25006 8.5113C3.32835 8.54727 3.41387 8.56477 3.5 8.56246H6.21688L5.1875 15.2281C5.16892 15.3516 5.19201 15.4779 5.25312 15.5868C5.31423 15.6958 5.40989 15.7814 5.525 15.83C5.5965 15.859 5.67284 15.8742 5.75 15.875C5.8359 15.8747 5.92062 15.8549 5.99765 15.8168C6.07468 15.7788 6.14197 15.7237 6.19438 15.6556L9.95187 10.745L15.0819 15.875L15.875 15.0818ZM11.6731 8.48933L13.5069 6.09308C13.566 6.01315 13.6028 5.91899 13.6137 5.82018C13.6246 5.72137 13.6091 5.62145 13.5687 5.53058C13.5265 5.43065 13.4562 5.34509 13.3663 5.28421C13.2765 5.22333 13.171 5.18973 13.0625 5.18746H10.3906L11.375 0.811207C11.3936 0.728192 11.3932 0.642033 11.3737 0.559216C11.3542 0.476399 11.3162 0.399081 11.2625 0.333082C11.2084 0.266318 11.1397 0.212844 11.0617 0.176766C10.9837 0.140687 10.8984 0.122964 10.8125 0.124957H5.1875C5.05824 0.121501 4.93174 0.162683 4.82929 0.241571C4.72684 0.320458 4.65469 0.432234 4.625 0.558082L4.45625 1.28933L11.6731 8.48933Z" fill="#b3b9c4"/></g><polygon points="30.0,45.0 60.0,60.0 30.0,75.0 0.0,60.0" fill="#ffffff" stroke="#dfe2e8" stroke-width="1"/><polygon points="60.0,60.0 90.0,75.0 60.0,90.0 30.0,75.0" fill="#eef0f3" stroke="#dfe2e8" stroke-width="1"/><g transform="matrix(1.875 0.938 -1.875 0.938 60.0 60.0)"><path transform="translate(4.00 4.00) scale(0.5)" d="M15.875 15.0818L0.918125 0.124957L0.125 0.918082L3.725 4.52371L2.9375 7.87058C2.91765 7.95443 2.91733 8.04171 2.93656 8.1257C2.95579 8.20969 2.99406 8.28815 3.04842 8.355C3.10277 8.42186 3.17176 8.47533 3.25006 8.5113C3.32835 8.54727 3.41387 8.56477 3.5 8.56246H6.21688L5.1875 15.2281C5.16892 15.3516 5.19201 15.4779 5.25312 15.5868C5.31423 15.6958 5.40989 15.7814 5.525 15.83C5.5965 15.859 5.67284 15.8742 5.75 15.875C5.8359 15.8747 5.92062 15.8549 5.99765 15.8168C6.07468 15.7788 6.14197 15.7237 6.19438 15.6556L9.95187 10.745L15.0819 15.875L15.875 15.0818ZM11.6731 8.48933L13.5069 6.09308C13.566 6.01315 13.6028 5.91899 13.6137 5.82018C13.6246 5.72137 13.6091 5.62145 13.5687 5.53058C13.5265 5.43065 13.4562 5.34509 13.3663 5.28421C13.2765 5.22333 13.171 5.18973 13.0625 5.18746H10.3906L11.375 0.811207C11.3936 0.728192 11.3932 0.642033 11.3737 0.559216C11.3542 0.476399 11.3162 0.399081 11.2625 0.333082C11.2084 0.266318 11.1397 0.212844 11.0617 0.176766C10.9837 0.140687 10.8984 0.122964 10.8125 0.124957H5.1875C5.05824 0.121501 4.93174 0.162683 4.82929 0.241571C4.72684 0.320458 4.65469 0.432234 4.625 0.558082L4.45625 1.28933L11.6731 8.48933Z" fill="#b3b9c4"/></g><polygon points="90.0,75.0 120.0,90.0 90.0,105.0 60.0,90.0" fill="#eef0f3" stroke="#dfe2e8" stroke-width="1"/><g transform="matrix(1.875 0.938 -1.875 0.938 90.0 75.0)"><path transform="translate(4.00 4.00) scale(0.5)" d="M15.875 15.0818L0.918125 0.124957L0.125 0.918082L3.725 4.52371L2.9375 7.87058C2.91765 7.95443 2.91733 8.04171 2.93656 8.1257C2.95579 8.20969 2.99406 8.28815 3.04842 8.355C3.10277 8.42186 3.17176 8.47533 3.25006 8.5113C3.32835 8.54727 3.41387 8.56477 3.5 8.56246H6.21688L5.1875 15.2281C5.16892 15.3516 5.19201 15.4779 5.25312 15.5868C5.31423 15.6958 5.40989 15.7814 5.525 15.83C5.5965 15.859 5.67284 15.8742 5.75 15.875C5.8359 15.8747 5.92062 15.8549 5.99765 15.8168C6.07468 15.7788 6.14197 15.7237 6.19438 15.6556L9.95187 10.745L15.0819 15.875L15.875 15.0818ZM11.6731 8.48933L13.5069 6.09308C13.566 6.01315 13.6028 5.91899 13.6137 5.82018C13.6246 5.72137 13.6091 5.62145 13.5687 5.53058C13.5265 5.43065 13.4562 5.34509 13.3663 5.28421C13.2765 5.22333 13.171 5.18973 13.0625 5.18746H10.3906L11.375 0.811207C11.3936 0.728192 11.3932 0.642033 11.3737 0.559216C11.3542 0.476399 11.3162 0.399081 11.2625 0.333082C11.2084 0.266318 11.1397 0.212844 11.0617 0.176766C10.9837 0.140687 10.8984 0.122964 10.8125 0.124957H5.1875C5.05824 0.121501 4.93174 0.162683 4.82929 0.241571C4.72684 0.320458 4.65469 0.432234 4.625 0.558082L4.45625 1.28933L11.6731 8.48933Z" fill="#b3b9c4"/></g><polygon points="120.0,90.0 150.0,105.0 120.0,120.0 90.0,105.0" fill="#ffffff" stroke="#dfe2e8" stroke-width="1"/><polygon points="150.0,105.0 180.0,120.0 150.0,135.0 120.0,120.0" fill="#eef0f3" stroke="#dfe2e8" stroke-width="1"/><g transform="matrix(1.875 0.938 -1.875 0.938 150.0 105.0)"><path transform="translate(4.00 4.00) scale(0.5)" d="M15.875 15.0818L0.918125 0.124957L0.125 0.918082L3.725 4.52371L2.9375 7.87058C2.91765 7.95443 2.91733 8.04171 2.93656 8.1257C2.95579 8.20969 2.99406 8.28815 3.04842 8.355C3.10277 8.42186 3.17176 8.47533 3.25006 8.5113C3.32835 8.54727 3.41387 8.56477 3.5 8.56246H6.21688L5.1875 15.2281C5.16892 15.3516 5.19201 15.4779 5.25312 15.5868C5.31423 15.6958 5.40989 15.7814 5.525 15.83C5.5965 15.859 5.67284 15.8742 5.75 15.875C5.8359 15.8747 5.92062 15.8549 5.99765 15.8168C6.07468 15.7788 6.14197 15.7237 6.19438 15.6556L9.95187 10.745L15.0819 15.875L15.875 15.0818ZM11.6731 8.48933L13.5069 6.09308C13.566 6.01315 13.6028 5.91899 13.6137 5.82018C13.6246 5.72137 13.6091 5.62145 13.5687 5.53058C13.5265 5.43065 13.4562 5.34509 13.3663 5.28421C13.2765 5.22333 13.171 5.18973 13.0625 5.18746H10.3906L11.375 0.811207C11.3936 0.728192 11.3932 0.642033 11.3737 0.559216C11.3542 0.476399 11.3162 0.399081 11.2625 0.333082C11.2084 0.266318 11.1397 0.212844 11.0617 0.176766C10.9837 0.140687 10.8984 0.122964 10.8125 0.124957H5.1875C5.05824 0.121501 4.93174 0.162683 4.82929 0.241571C4.72684 0.320458 4.65469 0.432234 4.625 0.558082L4.45625 1.28933L11.6731 8.48933Z" fill="#b3b9c4"/></g><polygon points="-60.0,30.0 -30.0,45.0 -60.0,60.0 -90.0,45.0" fill="#ffffff" stroke="#dfe2e8" stroke-width="1"/><polygon points="-30.0,45.0 0.0,60.0 -30.0,75.0 -60.0,60.0" fill="#ffffff" stroke="#dfe2e8" stroke-width="1"/><polygon points="0.0,60.0 30.0,75.0 0.0,90.0 -30.0,75.0" fill="#ffffff" stroke="#dfe2e8" stroke-width="1"/><polygon points="30.0,75.0 60.0,90.0 30.0,105.0 0.0,90.0" fill="#ffffff" stroke="#dfe2e8" stroke-width="1"/><polygon points="60.0,90.0 90.0,105.0 60.0,120.0 30.0,105.0" fill="#ffffff" stroke="#dfe2e8" stroke-width="1"/><polygon points="90.0,105.0 120.0,120.0 90.0,135.0 60.0,120.0" fill="#ffffff" stroke="#dfe2e8" stroke-width="1"/><polygon points="120.0,120.0 150.0,135.0 120.0,150.0 90.0,135.0" fill="#ffffff" stroke="#dfe2e8" stroke-width="1"/><polygon points="-90.0,45.0 -60.0,60.0 -90.0,75.0 -120.0,60.0" fill="#eef0f3" stroke="#dfe2e8" stroke-width="1"/><g transform="matrix(1.875 0.938 -1.875 0.938 -90.0 45.0)"><path transform="translate(4.00 4.00) scale(0.5)" d="M15.875 15.0818L0.918125 0.124957L0.125 0.918082L3.725 4.52371L2.9375 7.87058C2.91765 7.95443 2.91733 8.04171 2.93656 8.1257C2.95579 8.20969 2.99406 8.28815 3.04842 8.355C3.10277 8.42186 3.17176 8.47533 3.25006 8.5113C3.32835 8.54727 3.41387 8.56477 3.5 8.56246H6.21688L5.1875 15.2281C5.16892 15.3516 5.19201 15.4779 5.25312 15.5868C5.31423 15.6958 5.40989 15.7814 5.525 15.83C5.5965 15.859 5.67284 15.8742 5.75 15.875C5.8359 15.8747 5.92062 15.8549 5.99765 15.8168C6.07468 15.7788 6.14197 15.7237 6.19438 15.6556L9.95187 10.745L15.0819 15.875L15.875 15.0818ZM11.6731 8.48933L13.5069 6.09308C13.566 6.01315 13.6028 5.91899 13.6137 5.82018C13.6246 5.72137 13.6091 5.62145 13.5687 5.53058C13.5265 5.43065 13.4562 5.34509 13.3663 5.28421C13.2765 5.22333 13.171 5.18973 13.0625 5.18746H10.3906L11.375 0.811207C11.3936 0.728192 11.3932 0.642033 11.3737 0.559216C11.3542 0.476399 11.3162 0.399081 11.2625 0.333082C11.2084 0.266318 11.1397 0.212844 11.0617 0.176766C10.9837 0.140687 10.8984 0.122964 10.8125 0.124957H5.1875C5.05824 0.121501 4.93174 0.162683 4.82929 0.241571C4.72684 0.320458 4.65469 0.432234 4.625 0.558082L4.45625 1.28933L11.6731 8.48933Z" fill="#b3b9c4"/></g><polygon points="-60.0,60.0 -30.0,75.0 -60.0,90.0 -90.0,75.0" fill="#ffffff" stroke="#dfe2e8" stroke-width="1"/><polygon points="-30.0,75.0 0.0,90.0 -30.0,105.0 -60.0,90.0" fill="#ffffff" stroke="#dfe2e8" stroke-width="1"/><polygon points="0.0,90.0 30.0,105.0 0.0,120.0 -30.0,105.0" fill="#ffffff" stroke="#dfe2e8" stroke-width="1"/><polygon points="30.0,105.0 60.0,120.0 30.0,135.0 0.0,120.0" fill="#ffffff" stroke="#dfe2e8" stroke-width="1"/><polygon points="60.0,120.0 90.0,135.0 60.0,150.0 30.0,135.0" fill="#ffffff" stroke="#dfe2e8" stroke-width="1"/><polygon points="90.0,135.0 120.0,150.0 90.0,165.0 60.0,150.0" fill="#ffffff" stroke="#dfe2e8" stroke-width="1"/><polygon points="-120.0,60.0 -90.0,75.0 -120.0,90.0 -150.0,75.0" fill="#ffffff" stroke="#dfe2e8" stroke-width="1"/><polygon points="-90.0,75.0 -60.0,90.0 -90.0,105.0 -120.0,90.0" fill="#ffffff" stroke="#dfe2e8" stroke-width="1"/><polygon points="-60.0,90.0 -30.0,105.0 -60.0,120.0 -90.0,105.0" fill="#ffffff" stroke="#dfe2e8" stroke-width="1"/><polygon points="-30.0,105.0 0.0,120.0 -30.0,135.0 -60.0,120.0" fill="#ffffff" stroke="#dfe2e8" stroke-width="1"/><polygon points="0.0,120.0 30.0,135.0 0.0,150.0 -30.0,135.0" fill="#ffffff" stroke="#dfe2e8" stroke-width="1"/><polygon points="30.0,135.0 60.0,150.0 30.0,165.0 0.0,150.0" fill="#ffffff" stroke="#dfe2e8" stroke-width="1"/><polygon points="60.0,150.0 90.0,165.0 60.0,180.0 30.0,165.0" fill="#ffffff" stroke="#dfe2e8" stroke-width="1"/><ellipse cx="60.0" cy="105.0" rx="6" ry="3" fill="#FFE500" stroke="#D1B900" stroke-width="1"/><ellipse cx="90.0" cy="120.0" rx="6" ry="3" fill="#FFE500" stroke="#D1B900" stroke-width="1"/><polygon points="30.0,45.0 60.0,60.0 60.0,30.0 30.0,15.0" fill="#b8bdc6"/><polygon points="90.0,45.0 60.0,60.0 60.0,30.0 90.0,15.0" fill="#a9afb9"/><polygon points="60.0,0.0 90.0,15.0 60.0,30.0 30.0,15.0" fill="#cfd3da"/><g transform="matrix(1.875 0.938 -1.875 0.938 60.0 0.0)"><path transform="translate(3.60 3.60) scale(0.55)" d="M15.875 15.0818L0.918125 0.124957L0.125 0.918082L3.725 4.52371L2.9375 7.87058C2.91765 7.95443 2.91733 8.04171 2.93656 8.1257C2.95579 8.20969 2.99406 8.28815 3.04842 8.355C3.10277 8.42186 3.17176 8.47533 3.25006 8.5113C3.32835 8.54727 3.41387 8.56477 3.5 8.56246H6.21688L5.1875 15.2281C5.16892 15.3516 5.19201 15.4779 5.25312 15.5868C5.31423 15.6958 5.40989 15.7814 5.525 15.83C5.5965 15.859 5.67284 15.8742 5.75 15.875C5.8359 15.8747 5.92062 15.8549 5.99765 15.8168C6.07468 15.7788 6.14197 15.7237 6.19438 15.6556L9.95187 10.745L15.0819 15.875L15.875 15.0818ZM11.6731 8.48933L13.5069 6.09308C13.566 6.01315 13.6028 5.91899 13.6137 5.82018C13.6246 5.72137 13.6091 5.62145 13.5687 5.53058C13.5265 5.43065 13.4562 5.34509 13.3663 5.28421C13.2765 5.22333 13.171 5.18973 13.0625 5.18746H10.3906L11.375 0.811207C11.3936 0.728192 11.3932 0.642033 11.3737 0.559216C11.3542 0.476399 11.3162 0.399081 11.2625 0.333082C11.2084 0.266318 11.1397 0.212844 11.0617 0.176766C10.9837 0.140687 10.8984 0.122964 10.8125 0.124957H5.1875C5.05824 0.121501 4.93174 0.162683 4.82929 0.241571C4.72684 0.320458 4.65469 0.432234 4.625 0.558082L4.45625 1.28933L11.6731 8.48933Z" fill="#11203E"/></g><polygon points="0.0,60.0 30.0,75.0 30.0,45.0 0.0,30.0" fill="#b8bdc6"/><polygon points="60.0,60.0 30.0,75.0 30.0,45.0 60.0,30.0" fill="#a9afb9"/><polygon points="30.0,15.0 60.0,30.0 30.0,45.0 0.0,30.0" fill="#cfd3da"/><g transform="matrix(1.875 0.938 -1.875 0.938 30.0 15.0)"><path transform="translate(3.60 3.60) scale(0.55)" d="M15.875 15.0818L0.918125 0.124957L0.125 0.918082L3.725 4.52371L2.9375 7.87058C2.91765 7.95443 2.91733 8.04171 2.93656 8.1257C2.95579 8.20969 2.99406 8.28815 3.04842 8.355C3.10277 8.42186 3.17176 8.47533 3.25006 8.5113C3.32835 8.54727 3.41387 8.56477 3.5 8.56246H6.21688L5.1875 15.2281C5.16892 15.3516 5.19201 15.4779 5.25312 15.5868C5.31423 15.6958 5.40989 15.7814 5.525 15.83C5.5965 15.859 5.67284 15.8742 5.75 15.875C5.8359 15.8747 5.92062 15.8549 5.99765 15.8168C6.07468 15.7788 6.14197 15.7237 6.19438 15.6556L9.95187 10.745L15.0819 15.875L15.875 15.0818ZM11.6731 8.48933L13.5069 6.09308C13.566 6.01315 13.6028 5.91899 13.6137 5.82018C13.6246 5.72137 13.6091 5.62145 13.5687 5.53058C13.5265 5.43065 13.4562 5.34509 13.3663 5.28421C13.2765 5.22333 13.171 5.18973 13.0625 5.18746H10.3906L11.375 0.811207C11.3936 0.728192 11.3932 0.642033 11.3737 0.559216C11.3542 0.476399 11.3162 0.399081 11.2625 0.333082C11.2084 0.266318 11.1397 0.212844 11.0617 0.176766C10.9837 0.140687 10.8984 0.122964 10.8125 0.124957H5.1875C5.05824 0.121501 4.93174 0.162683 4.82929 0.241571C4.72684 0.320458 4.65469 0.432234 4.625 0.558082L4.45625 1.28933L11.6731 8.48933Z" fill="#11203E"/></g><polygon points="-150.0,75.0 -120.0,90.0 -120.0,60.0 -150.0,45.0" fill="#b8bdc6"/><polygon points="-90.0,75.0 -120.0,90.0 -120.0,60.0 -90.0,45.0" fill="#a9afb9"/><polygon points="-120.0,30.0 -90.0,45.0 -120.0,60.0 -150.0,45.0" fill="#cfd3da"/><g transform="matrix(1.875 0.938 -1.875 0.938 -120.0 30.0)"><path transform="translate(3.60 3.60) scale(0.55)" d="M15.875 15.0818L0.918125 0.124957L0.125 0.918082L3.725 4.52371L2.9375 7.87058C2.91765 7.95443 2.91733 8.04171 2.93656 8.1257C2.95579 8.20969 2.99406 8.28815 3.04842 8.355C3.10277 8.42186 3.17176 8.47533 3.25006 8.5113C3.32835 8.54727 3.41387 8.56477 3.5 8.56246H6.21688L5.1875 15.2281C5.16892 15.3516 5.19201 15.4779 5.25312 15.5868C5.31423 15.6958 5.40989 15.7814 5.525 15.83C5.5965 15.859 5.67284 15.8742 5.75 15.875C5.8359 15.8747 5.92062 15.8549 5.99765 15.8168C6.07468 15.7788 6.14197 15.7237 6.19438 15.6556L9.95187 10.745L15.0819 15.875L15.875 15.0818ZM11.6731 8.48933L13.5069 6.09308C13.566 6.01315 13.6028 5.91899 13.6137 5.82018C13.6246 5.72137 13.6091 5.62145 13.5687 5.53058C13.5265 5.43065 13.4562 5.34509 13.3663 5.28421C13.2765 5.22333 13.171 5.18973 13.0625 5.18746H10.3906L11.375 0.811207C11.3936 0.728192 11.3932 0.642033 11.3737 0.559216C11.3542 0.476399 11.3162 0.399081 11.2625 0.333082C11.2084 0.266318 11.1397 0.212844 11.0617 0.176766C10.9837 0.140687 10.8984 0.122964 10.8125 0.124957H5.1875C5.05824 0.121501 4.93174 0.162683 4.82929 0.241571C4.72684 0.320458 4.65469 0.432234 4.625 0.558082L4.45625 1.28933L11.6731 8.48933Z" fill="#11203E"/></g><polygon points="-90.0,75.0 -60.0,90.0 -60.0,74.0 -90.0,59.0" fill="#E8CF00"/><polygon points="-30.0,75.0 -60.0,90.0 -60.0,74.0 -30.0,59.0" fill="#D1B900"/><polygon points="-60.0,44.0 -30.0,59.0 -60.0,74.0 -90.0,59.0" fill="#FFE500"/><g transform="matrix(1.875 0.938 -1.875 0.938 -60.0 44.0)"><path transform="translate(3.60 3.60) scale(0.55)" d="M11.9039 8.49553L4.42571 1.18281L3.74875 4.46782L3.01699 7.86709C2.99853 7.95225 2.99999 8.0409 3.02123 8.12621C3.04248 8.21151 3.08296 8.29119 3.13954 8.3591C3.19612 8.427 3.26729 8.48131 3.34756 8.51785C3.42784 8.55438 3.51506 8.57215 3.60252 8.5698H6.36252L5.45266 15.3398C5.4363 15.4653 5.46232 15.5935 5.52663 15.7042C5.59093 15.8149 5.68985 15.9017 5.80778 15.9511C5.88101 15.9806 5.95887 15.9961 6.03727 15.9968C6.12453 15.9966 6.21019 15.9764 6.28766 15.9378C6.36514 15.8991 6.43238 15.8431 6.48423 15.774L10.2013 10.7865L11.9039 8.49553ZM11.9039 8.49553L13.7179 6.06176C13.7763 5.98058 13.8118 5.88494 13.8209 5.78459C13.8299 5.68423 13.8121 5.58275 13.7693 5.49046C13.7243 5.38896 13.6511 5.30206 13.5586 5.24023C13.4662 5.17839 13.3583 5.14427 13.248 5.14196L10.5337 5.14196L11.4445 0.697198C11.4618 0.612884 11.4596 0.525376 11.4381 0.441262C11.4166 0.357148 11.3764 0.27862 11.3205 0.211587C11.2642 0.143778 11.1933 0.089467 11.1133 0.0528239C11.0333 0.0161808 10.9464 -0.00181983 10.8591 0.000204192L5.14484 0.000204192C5.01346 -0.00330556 4.88579 0.0385213 4.78332 0.118644C4.68085 0.198766 4.60984 0.312292 4.58224 0.44011L4.42571 1.18281L11.9039 8.49553Z" fill="#11203E"/></g><polygon points="120.0,90.0 150.0,105.0 150.0,75.0 120.0,60.0" fill="#b8bdc6"/><polygon points="180.0,90.0 150.0,105.0 150.0,75.0 180.0,60.0" fill="#a9afb9"/><polygon points="150.0,45.0 180.0,60.0 150.0,75.0 120.0,60.0" fill="#cfd3da"/><g transform="matrix(1.875 0.938 -1.875 0.938 150.0 45.0)"><path transform="translate(3.60 3.60) scale(0.55)" d="M15.875 15.0818L0.918125 0.124957L0.125 0.918082L3.725 4.52371L2.9375 7.87058C2.91765 7.95443 2.91733 8.04171 2.93656 8.1257C2.95579 8.20969 2.99406 8.28815 3.04842 8.355C3.10277 8.42186 3.17176 8.47533 3.25006 8.5113C3.32835 8.54727 3.41387 8.56477 3.5 8.56246H6.21688L5.1875 15.2281C5.16892 15.3516 5.19201 15.4779 5.25312 15.5868C5.31423 15.6958 5.40989 15.7814 5.525 15.83C5.5965 15.859 5.67284 15.8742 5.75 15.875C5.8359 15.8747 5.92062 15.8549 5.99765 15.8168C6.07468 15.7788 6.14197 15.7237 6.19438 15.6556L9.95187 10.745L15.0819 15.875L15.875 15.0818ZM11.6731 8.48933L13.5069 6.09308C13.566 6.01315 13.6028 5.91899 13.6137 5.82018C13.6246 5.72137 13.6091 5.62145 13.5687 5.53058C13.5265 5.43065 13.4562 5.34509 13.3663 5.28421C13.2765 5.22333 13.171 5.18973 13.0625 5.18746H10.3906L11.375 0.811207C11.3936 0.728192 11.3932 0.642033 11.3737 0.559216C11.3542 0.476399 11.3162 0.399081 11.2625 0.333082C11.2084 0.266318 11.1397 0.212844 11.0617 0.176766C10.9837 0.140687 10.8984 0.122964 10.8125 0.124957H5.1875C5.05824 0.121501 4.93174 0.162683 4.82929 0.241571C4.72684 0.320458 4.65469 0.432234 4.625 0.558082L4.45625 1.28933L11.6731 8.48933Z" fill="#11203E"/></g><polygon points="0.0,90.0 30.0,105.0 30.0,89.0 0.0,74.0" fill="#E8CF00"/><polygon points="60.0,90.0 30.0,105.0 30.0,89.0 60.0,74.0" fill="#D1B900"/><polygon points="30.0,59.0 60.0,74.0 30.0,89.0 0.0,74.0" fill="#FFE500"/><g transform="matrix(1.875 0.938 -1.875 0.938 30.0 59.0)"><path transform="translate(3.60 3.60) scale(0.55)" d="M11.9039 8.49553L4.42571 1.18281L3.74875 4.46782L3.01699 7.86709C2.99853 7.95225 2.99999 8.0409 3.02123 8.12621C3.04248 8.21151 3.08296 8.29119 3.13954 8.3591C3.19612 8.427 3.26729 8.48131 3.34756 8.51785C3.42784 8.55438 3.51506 8.57215 3.60252 8.5698H6.36252L5.45266 15.3398C5.4363 15.4653 5.46232 15.5935 5.52663 15.7042C5.59093 15.8149 5.68985 15.9017 5.80778 15.9511C5.88101 15.9806 5.95887 15.9961 6.03727 15.9968C6.12453 15.9966 6.21019 15.9764 6.28766 15.9378C6.36514 15.8991 6.43238 15.8431 6.48423 15.774L10.2013 10.7865L11.9039 8.49553ZM11.9039 8.49553L13.7179 6.06176C13.7763 5.98058 13.8118 5.88494 13.8209 5.78459C13.8299 5.68423 13.8121 5.58275 13.7693 5.49046C13.7243 5.38896 13.6511 5.30206 13.5586 5.24023C13.4662 5.17839 13.3583 5.14427 13.248 5.14196L10.5337 5.14196L11.4445 0.697198C11.4618 0.612884 11.4596 0.525376 11.4381 0.441262C11.4166 0.357148 11.3764 0.27862 11.3205 0.211587C11.2642 0.143778 11.1933 0.089467 11.1133 0.0528239C11.0333 0.0161808 10.9464 -0.00181983 10.8591 0.000204192L5.14484 0.000204192C5.01346 -0.00330556 4.88579 0.0385213 4.78332 0.118644C4.68085 0.198766 4.60984 0.312292 4.58224 0.44011L4.42571 1.18281L11.9039 8.49553Z" fill="#11203E"/></g><polygon points="-60.0,90.0 -30.0,105.0 -30.0,89.0 -60.0,74.0" fill="#E8CF00"/><polygon points="0.0,90.0 -30.0,105.0 -30.0,89.0 0.0,74.0" fill="#D1B900"/><polygon points="-30.0,59.0 0.0,74.0 -30.0,89.0 -60.0,74.0" fill="#FFE500"/><g transform="matrix(1.875 0.938 -1.875 0.938 -30.0 59.0)"><path transform="translate(3.60 3.60) scale(0.55)" d="M11.9039 8.49553L4.42571 1.18281L3.74875 4.46782L3.01699 7.86709C2.99853 7.95225 2.99999 8.0409 3.02123 8.12621C3.04248 8.21151 3.08296 8.29119 3.13954 8.3591C3.19612 8.427 3.26729 8.48131 3.34756 8.51785C3.42784 8.55438 3.51506 8.57215 3.60252 8.5698H6.36252L5.45266 15.3398C5.4363 15.4653 5.46232 15.5935 5.52663 15.7042C5.59093 15.8149 5.68985 15.9017 5.80778 15.9511C5.88101 15.9806 5.95887 15.9961 6.03727 15.9968C6.12453 15.9966 6.21019 15.9764 6.28766 15.9378C6.36514 15.8991 6.43238 15.8431 6.48423 15.774L10.2013 10.7865L11.9039 8.49553ZM11.9039 8.49553L13.7179 6.06176C13.7763 5.98058 13.8118 5.88494 13.8209 5.78459C13.8299 5.68423 13.8121 5.58275 13.7693 5.49046C13.7243 5.38896 13.6511 5.30206 13.5586 5.24023C13.4662 5.17839 13.3583 5.14427 13.248 5.14196L10.5337 5.14196L11.4445 0.697198C11.4618 0.612884 11.4596 0.525376 11.4381 0.441262C11.4166 0.357148 11.3764 0.27862 11.3205 0.211587C11.2642 0.143778 11.1933 0.089467 11.1133 0.0528239C11.0333 0.0161808 10.9464 -0.00181983 10.8591 0.000204192L5.14484 0.000204192C5.01346 -0.00330556 4.88579 0.0385213 4.78332 0.118644C4.68085 0.198766 4.60984 0.312292 4.58224 0.44011L4.42571 1.18281L11.9039 8.49553Z" fill="#11203E"/></g><polygon points="-120.0,90.0 -90.0,105.0 -90.0,89.0 -120.0,74.0" fill="#E8CF00"/><polygon points="-60.0,90.0 -90.0,105.0 -90.0,89.0 -60.0,74.0" fill="#D1B900"/><polygon points="-90.0,59.0 -60.0,74.0 -90.0,89.0 -120.0,74.0" fill="#FFE500"/><g transform="matrix(1.875 0.938 -1.875 0.938 -90.0 59.0)"><path transform="translate(3.60 3.60) scale(0.55)" d="M11.9039 8.49553L4.42571 1.18281L3.74875 4.46782L3.01699 7.86709C2.99853 7.95225 2.99999 8.0409 3.02123 8.12621C3.04248 8.21151 3.08296 8.29119 3.13954 8.3591C3.19612 8.427 3.26729 8.48131 3.34756 8.51785C3.42784 8.55438 3.51506 8.57215 3.60252 8.5698H6.36252L5.45266 15.3398C5.4363 15.4653 5.46232 15.5935 5.52663 15.7042C5.59093 15.8149 5.68985 15.9017 5.80778 15.9511C5.88101 15.9806 5.95887 15.9961 6.03727 15.9968C6.12453 15.9966 6.21019 15.9764 6.28766 15.9378C6.36514 15.8991 6.43238 15.8431 6.48423 15.774L10.2013 10.7865L11.9039 8.49553ZM11.9039 8.49553L13.7179 6.06176C13.7763 5.98058 13.8118 5.88494 13.8209 5.78459C13.8299 5.68423 13.8121 5.58275 13.7693 5.49046C13.7243 5.38896 13.6511 5.30206 13.5586 5.24023C13.4662 5.17839 13.3583 5.14427 13.248 5.14196L10.5337 5.14196L11.4445 0.697198C11.4618 0.612884 11.4596 0.525376 11.4381 0.441262C11.4166 0.357148 11.3764 0.27862 11.3205 0.211587C11.2642 0.143778 11.1933 0.089467 11.1133 0.0528239C11.0333 0.0161808 10.9464 -0.00181983 10.8591 0.000204192L5.14484 0.000204192C5.01346 -0.00330556 4.88579 0.0385213 4.78332 0.118644C4.68085 0.198766 4.60984 0.312292 4.58224 0.44011L4.42571 1.18281L11.9039 8.49553Z" fill="#11203E"/></g><polygon points="90.0,105.0 120.0,120.0 120.0,90.0 90.0,75.0" fill="#b8bdc6"/><polygon points="150.0,105.0 120.0,120.0 120.0,90.0 150.0,75.0" fill="#a9afb9"/><polygon points="120.0,60.0 150.0,75.0 120.0,90.0 90.0,75.0" fill="#cfd3da"/><g transform="matrix(1.875 0.938 -1.875 0.938 120.0 60.0)"><path transform="translate(3.60 3.60) scale(0.55)" d="M15.875 15.0818L0.918125 0.124957L0.125 0.918082L3.725 4.52371L2.9375 7.87058C2.91765 7.95443 2.91733 8.04171 2.93656 8.1257C2.95579 8.20969 2.99406 8.28815 3.04842 8.355C3.10277 8.42186 3.17176 8.47533 3.25006 8.5113C3.32835 8.54727 3.41387 8.56477 3.5 8.56246H6.21688L5.1875 15.2281C5.16892 15.3516 5.19201 15.4779 5.25312 15.5868C5.31423 15.6958 5.40989 15.7814 5.525 15.83C5.5965 15.859 5.67284 15.8742 5.75 15.875C5.8359 15.8747 5.92062 15.8549 5.99765 15.8168C6.07468 15.7788 6.14197 15.7237 6.19438 15.6556L9.95187 10.745L15.0819 15.875L15.875 15.0818ZM11.6731 8.48933L13.5069 6.09308C13.566 6.01315 13.6028 5.91899 13.6137 5.82018C13.6246 5.72137 13.6091 5.62145 13.5687 5.53058C13.5265 5.43065 13.4562 5.34509 13.3663 5.28421C13.2765 5.22333 13.171 5.18973 13.0625 5.18746H10.3906L11.375 0.811207C11.3936 0.728192 11.3932 0.642033 11.3737 0.559216C11.3542 0.476399 11.3162 0.399081 11.2625 0.333082C11.2084 0.266318 11.1397 0.212844 11.0617 0.176766C10.9837 0.140687 10.8984 0.122964 10.8125 0.124957H5.1875C5.05824 0.121501 4.93174 0.162683 4.82929 0.241571C4.72684 0.320458 4.65469 0.432234 4.625 0.558082L4.45625 1.28933L11.6731 8.48933Z" fill="#11203E"/></g><polygon points="-30.0,105.0 0.0,120.0 0.0,104.0 -30.0,89.0" fill="#E8CF00"/><polygon points="30.0,105.0 0.0,120.0 0.0,104.0 30.0,89.0" fill="#D1B900"/><polygon points="0.0,74.0 30.0,89.0 0.0,104.0 -30.0,89.0" fill="#FFE500"/><g transform="matrix(1.875 0.938 -1.875 0.938 0.0 74.0)"><path transform="translate(3.60 3.60) scale(0.55)" d="M11.9039 8.49553L4.42571 1.18281L3.74875 4.46782L3.01699 7.86709C2.99853 7.95225 2.99999 8.0409 3.02123 8.12621C3.04248 8.21151 3.08296 8.29119 3.13954 8.3591C3.19612 8.427 3.26729 8.48131 3.34756 8.51785C3.42784 8.55438 3.51506 8.57215 3.60252 8.5698H6.36252L5.45266 15.3398C5.4363 15.4653 5.46232 15.5935 5.52663 15.7042C5.59093 15.8149 5.68985 15.9017 5.80778 15.9511C5.88101 15.9806 5.95887 15.9961 6.03727 15.9968C6.12453 15.9966 6.21019 15.9764 6.28766 15.9378C6.36514 15.8991 6.43238 15.8431 6.48423 15.774L10.2013 10.7865L11.9039 8.49553ZM11.9039 8.49553L13.7179 6.06176C13.7763 5.98058 13.8118 5.88494 13.8209 5.78459C13.8299 5.68423 13.8121 5.58275 13.7693 5.49046C13.7243 5.38896 13.6511 5.30206 13.5586 5.24023C13.4662 5.17839 13.3583 5.14427 13.248 5.14196L10.5337 5.14196L11.4445 0.697198C11.4618 0.612884 11.4596 0.525376 11.4381 0.441262C11.4166 0.357148 11.3764 0.27862 11.3205 0.211587C11.2642 0.143778 11.1933 0.089467 11.1133 0.0528239C11.0333 0.0161808 10.9464 -0.00181983 10.8591 0.000204192L5.14484 0.000204192C5.01346 -0.00330556 4.88579 0.0385213 4.78332 0.118644C4.68085 0.198766 4.60984 0.312292 4.58224 0.44011L4.42571 1.18281L11.9039 8.49553Z" fill="#11203E"/></g><ellipse cx="120.0" cy="135.0" rx="22" ry="11" fill="#FFE500" opacity=".45" class="iso-shadow"/><g class="iso-float"><polygon points="90.0,117.0 120.0,132.0 120.0,116.0 90.0,101.0" fill="#E8CF00"/><polygon points="150.0,117.0 120.0,132.0 120.0,116.0 150.0,101.0" fill="#D1B900"/><polygon points="120.0,86.0 150.0,101.0 120.0,116.0 90.0,101.0" fill="#FFE500"/><g transform="matrix(1.875 0.938 -1.875 0.938 120.0 86.0)"><path transform="translate(3.60 3.60) scale(0.55)" d="M11.9039 8.49553L4.42571 1.18281L3.74875 4.46782L3.01699 7.86709C2.99853 7.95225 2.99999 8.0409 3.02123 8.12621C3.04248 8.21151 3.08296 8.29119 3.13954 8.3591C3.19612 8.427 3.26729 8.48131 3.34756 8.51785C3.42784 8.55438 3.51506 8.57215 3.60252 8.5698H6.36252L5.45266 15.3398C5.4363 15.4653 5.46232 15.5935 5.52663 15.7042C5.59093 15.8149 5.68985 15.9017 5.80778 15.9511C5.88101 15.9806 5.95887 15.9961 6.03727 15.9968C6.12453 15.9966 6.21019 15.9764 6.28766 15.9378C6.36514 15.8991 6.43238 15.8431 6.48423 15.774L10.2013 10.7865L11.9039 8.49553ZM11.9039 8.49553L13.7179 6.06176C13.7763 5.98058 13.8118 5.88494 13.8209 5.78459C13.8299 5.68423 13.8121 5.58275 13.7693 5.49046C13.7243 5.38896 13.6511 5.30206 13.5586 5.24023C13.4662 5.17839 13.3583 5.14427 13.248 5.14196L10.5337 5.14196L11.4445 0.697198C11.4618 0.612884 11.4596 0.525376 11.4381 0.441262C11.4166 0.357148 11.3764 0.27862 11.3205 0.211587C11.2642 0.143778 11.1933 0.089467 11.1133 0.0528239C11.0333 0.0161808 10.9464 -0.00181983 10.8591 0.000204192L5.14484 0.000204192C5.01346 -0.00330556 4.88579 0.0385213 4.78332 0.118644C4.68085 0.198766 4.60984 0.312292 4.58224 0.44011L4.42571 1.18281L11.9039 8.49553Z" fill="#11203E"/></g><g class="iso-rays" stroke="#FFC800" stroke-width="3" stroke-linecap="round"><line x1="94.0" y1="97.0" x2="85.4" y2="93.0"/><line x1="109.7" y1="86.4" x2="106.3" y2="78.9"/><line x1="130.3" y1="86.4" x2="133.7" y2="78.9"/><line x1="146.0" y1="97.0" x2="154.6" y2="93.0"/><line x1="149.5" y1="113.2" x2="159.4" y2="114.6"/><line x1="90.5" y1="113.2" x2="80.6" y2="114.6"/></g></g></svg>
+      <h3>Snakergy</h3>
+      <p>Збирай енергію, оминаючи відключення. Чим швидше проходиш рівні, тим більше світла отримає твій район.</p>
+      <label for="district">Район Києва
+        <select class="pill" id="district"><option value="">Обери район</option>${DISTRICTS.map(d => `<option${d === district ? ' selected' : ''}>${d}</option>`).join('')}</select>
+      </label>
+      <button class="btn" id="goBtn"${district ? '' : ' disabled'}>Врубай</button>
+      <p class="note">Фан-проєкт за мотивами графіків відключень. Не пов'язаний з ДТЕК.</p>`);
+    card.classList.add('intro');
+    const s2 = document.getElementById('district'), go = document.getElementById('goBtn');
+    s2.focus();
+    s2.addEventListener('change', () => { go.disabled = !s2.value; });
+    go.addEventListener('click', () => {
+      if (!s2.value) return;
+      district = s2.value; lastAdded = 0;
+      document.getElementById('hDistrict').textContent = district;
+        S.total = 0; setupLevel(1); start();
+    });
+  }
+
+  // controls: logical dir is [dRow(queue), dCol(hour)]
+  function steer(d) {
+    if (!S.running) return;
+    const last = S.queue.length ? S.queue[S.queue.length - 1] : S.dir;
+    if (d[0] === -last[0] && d[1] === -last[1]) return; // no reversing
+    if (d[0] === last[0] && d[1] === last[1]) return;
+    if (S.queue.length < 2) S.queue.push(d);
+  }
+  // screen direction -> logical direction (mobile field is rotated: hours go down, queues go across)
+  const SCREEN = MOBILE
+    ? { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }
+    : { up: [-1, 0], down: [1, 0], left: [0, -1], right: [0, 1] };
+  const KEYS = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
+  window.addEventListener('keydown', e => {
+    const k = KEYS[e.key];
+    if (!k || !S.running) return;
+    e.preventDefault(); steer(SCREEN[k]);
+  });
+  document.querySelectorAll('#pad button').forEach(b => {
+    b.addEventListener('pointerdown', e => {
+      e.preventDefault(); steer(SCREEN[b.dataset.dir]);
+      b.classList.add('hit'); setTimeout(() => b.classList.remove('hit'), 120);
+    });
+  });
+  // swipe anywhere: turns as soon as the finger travels 30px, no need to lift it
+  let sw = null;
+  window.addEventListener('touchstart', e => {
+    if (!S.running || e.target.closest('.pad, .modal')) { sw = null; return; }
+    const t = e.touches[0]; sw = { x: t.clientX, y: t.clientY };
+  }, { passive: true });
+  window.addEventListener('touchmove', e => {
+    if (MOBILE && !e.target.closest('.modal')) e.preventDefault(); // the page never scrolls on phones
+    if (!S.running || !sw) return;
+    const t = e.touches[0], dx = t.clientX - sw.x, dy = t.clientY - sw.y;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 30) return;
+    steer(SCREEN[Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up')]);
+    sw = { x: t.clientX, y: t.clientY };
+  }, { passive: false });
+  window.addEventListener('touchend', () => { sw = null; });
+
+  // fit the rotated field to the phone screen
+  function fit() {
+    if (!MOBILE) return;
+    const wrap = document.querySelector('.wrap'), top = document.querySelector('.top').offsetHeight, pad = document.getElementById('pad').offsetHeight;
+    const cs = getComputedStyle(wrap);
+    const innerH = wrap.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    const availW = document.documentElement.clientWidth - 32 - 30 - 14;
+    const availH = innerH - (top ? top + 8 : 0) - (pad ? pad + 10 : 0) - 26 /*queue labels*/ - 26 /*grid lines*/;
+    const c = Math.max(14, Math.min(36, Math.floor(availW / 12), Math.floor(availH / 24)));
+    document.documentElement.style.setProperty('--cell', c + 'px');
+  }
+  fit(); window.addEventListener('resize', fit);
+
+  // confetti
+  const cv = document.getElementById('confetti'), cx = cv.getContext('2d');
+  function confetti() {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    cv.hidden = false; cv.width = innerWidth; cv.height = innerHeight;
+    const colors = ['#ffe100', '#141a33', '#cfd3da', '#ffffff'];
+    const ps = Array.from({ length: 160 }, () => ({
+      x: innerWidth / 2 + (Math.random() - .5) * 200, y: innerHeight / 2.4,
+      vx: (Math.random() - .5) * 14, vy: -Math.random() * 14 - 4,
+      s: 6 + Math.random() * 6, r: Math.random() * 6, vr: (Math.random() - .5) * .3,
+      c: colors[Math.floor(Math.random() * colors.length)]
+    }));
+    const t0 = performance.now();
+    (function frame(t) {
+      cx.clearRect(0, 0, cv.width, cv.height);
+      ps.forEach(p => { p.vy += .35; p.vx *= .99; p.x += p.vx; p.y += p.vy; p.r += p.vr;
+        cx.save(); cx.translate(p.x, p.y); cx.rotate(p.r); cx.fillStyle = p.c; cx.strokeStyle = '#141a33'; cx.lineWidth = .5;
+        cx.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2); cx.strokeRect(-p.s / 2, -p.s / 4, p.s, p.s / 2); cx.restore(); });
+      if (t - t0 < 2600) requestAnimationFrame(frame); else { cx.clearRect(0, 0, cv.width, cv.height); cv.hidden = true; }
+    })(t0);
+  }
+
+  // initial state: level 1 laid out, waiting for "Врубай"
+  setupLevel(1);
+  showIntro();
+})();
+</script>
+
+</body>
+</html>
